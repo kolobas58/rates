@@ -1,0 +1,81 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.24.5'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '${{ env.FLUTTER_VERSION }}', channel: stable, cache: true }
+      - run: bash tool/prepare.sh android
+      - name: Постоянный ключ подписи (иначе обновления не встанут поверх старой версии)
+        env: { KS: '${{ secrets.ANDROID_KEYSTORE_B64 }}' }
+        run: |
+          if [ -n "$KS" ]; then mkdir -p ~/.android && echo "$KS" | base64 -d > ~/.android/debug.keystore; echo "ключ подписи подключён"; else echo "::warning::нет секрета ANDROID_KEYSTORE_B64 — APK подписан случайным ключом"; fi
+      - run: flutter test
+      - run: flutter build apk --release
+      - run: mkdir -p out && cp build/app/outputs/flutter-apk/app-release.apk out/Rates-Android.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: out/* }
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '${{ env.FLUTTER_VERSION }}', channel: stable, cache: true }
+      - run: bash tool/prepare.sh linux
+      - run: flutter build linux --release
+      - run: |
+          mkdir -p out
+          cp -r build/linux/x64/release/bundle rates
+          cp assets/icon.png rates/icon.png
+          tar -czf out/Rates-Linux-x64.tar.gz rates
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: out/* }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '${{ env.FLUTTER_VERSION }}', channel: stable, cache: true }
+      - run: bash tool/prepare.sh windows
+        shell: bash
+      - run: flutter build windows --release
+      - shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item -Recurse build/windows/x64/runner/Release Rates
+          Compress-Archive -Path Rates -DestinationPath out/Rates-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: out/* }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, linux, windows]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body: |
+            **Курс валют by kolobas58** — бат, доллар, СНГ и весь мир. Курсы — с kolobas58.club, без интернета показывает последний сохранённый.
+            - Windows: `Rates-Windows-x64.zip` — распаковать, запустить `rates.exe`
+            - Linux: `Rates-Linux-x64.tar.gz` — распаковать, запустить `rates/rates`
+            - Android: `Rates-Android.apk` — установить (разрешить установку из этого источника)

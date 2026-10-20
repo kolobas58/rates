@@ -1,0 +1,36 @@
+name: rates
+description: "Курс валют by kolobas58 — бат, доллар, СНГ и весь мир."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.1
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/currencies.json
+
+flutter_launcher_icons:
+  image_path: "assets/icon.png"
+  android: true
+  ios: false
+  min_sdk_android: 21
+  adaptive_icon_background: "#128C7E"
+  adaptive_icon_foreground: "assets/icon_fg.png"
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
+    icon_size: 256
