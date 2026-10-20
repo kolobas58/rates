@@ -23,5 +23,28 @@ case "$P" in
     ;;
 esac
 flutter pub get
-if [ "$P" != linux ]; then dart run flutter_launcher_icons; fi
+# значок — только для своей платформы (иначе генератор лезет в папки, которых в этой сборке нет)
+if [ "$P" = android ]; then
+  cat > .icons.yaml <<'Y'
+flutter_launcher_icons:
+  image_path: "assets/icon.png"
+  android: true
+  ios: false
+  min_sdk_android: 21
+  adaptive_icon_background: "#128C7E"
+  adaptive_icon_foreground: "assets/icon_fg.png"
+Y
+  dart run flutter_launcher_icons -f .icons.yaml
+elif [ "$P" = windows ]; then
+  cat > .icons.yaml <<'Y'
+flutter_launcher_icons:
+  android: false
+  ios: false
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
+    icon_size: 256
+Y
+  dart run flutter_launcher_icons -f .icons.yaml
+fi
 echo "prepared $P"

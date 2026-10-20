@@ -13,3 +13,4 @@ web/
 *.iml
 .idea/
 .run.log
+.icons.yaml

@@ -22,15 +22,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/currencies.json
-
-flutter_launcher_icons:
-  image_path: "assets/icon.png"
-  android: true
-  ios: false
-  min_sdk_android: 21
-  adaptive_icon_background: "#128C7E"
-  adaptive_icon_foreground: "assets/icon_fg.png"
-  windows:
-    generate: true
-    image_path: "assets/icon.png"
-    icon_size: 256
