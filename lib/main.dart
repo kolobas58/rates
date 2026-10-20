@@ -1,14 +1,36 @@
 // Курс валют by kolobas58 — бат, доллар, СНГ и весь мир. Windows · Linux · Android.
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'data.dart';
 import 'home.dart';
 
 const brand = Color(0xFF128C7E);
 const brandDark = Color(0xFF1FB59F);
+final desktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (desktop) {
+    // окно без системной рамки — своя полоска заголовка (как у Speedtest)
+    await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(520, 860),
+        minimumSize: Size(380, 520),
+        center: true,
+        title: 'Курс валют',
+        titleBarStyle: TitleBarStyle.hidden,
+        windowButtonVisibility: false,
+      ),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+  }
   final store = await Store.open();
   final currencies = await loadCurrencies();
   runApp(RatesApp(store: store, currencies: currencies));
@@ -51,10 +73,12 @@ class _RatesAppState extends State<RatesApp> {
     return MaterialApp(
       title: 'Курс валют',
       debugShowCheckedModeBanner: false,
+      // на Linux у окна без рамки края не тянутся сами — даём тянуть за край
+      builder: (context, child) => Platform.isLinux ? DragToResizeArea(resizeEdgeSize: 6, child: child!) : child!,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: {'light': ThemeMode.light, 'dark': ThemeMode.dark}[theme] ?? ThemeMode.system,
-      home: HomePage(store: widget.store, currencies: widget.currencies, theme: theme, onTheme: _cycleTheme),
+      home: HomePage(store: widget.store, currencies: widget.currencies, theme: theme, onTheme: _cycleTheme, desktop: desktop),
     );
   }
 }

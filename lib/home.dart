@@ -1,10 +1,11 @@
 // Главный экран — как страница kolobas58.club/rates:
-// сумма → доллар и бат → избранное (★) → свёрнутый «Остальной мир» (поиск, СНГ, все страны).
+// сумма → две основные валюты (доллар и бат, меняются в «Остальном мире») → избранное (★) → «Остальной мир».
 import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'data.dart';
 
@@ -15,7 +16,8 @@ class HomePage extends StatefulWidget {
   final List<Currency> currencies;
   final String theme;
   final VoidCallback onTheme;
-  const HomePage({super.key, required this.store, required this.currencies, required this.theme, required this.onTheme});
+  final bool desktop; // Windows/Linux: своя полоска заголовка вместо рамки окна
+  const HomePage({super.key, required this.store, required this.currencies, required this.theme, required this.onTheme, this.desktop = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -35,6 +37,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String baseCode = 'THB';
   double baseV = 1000;
   List<String> favs = [];
+  List<String> mains = const ['USD', 'THB'];
+  int? pickSlot; // меняем основную валюту № pickSlot — строки «Остального мира» становятся выбором
   bool worldOpen = false;
   String query = '';
   Timer? timer;
@@ -47,7 +51,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     rates = store.rates;
-    favs = store.favs.where((c) => byCode.containsKey(c) && c != 'USD' && c != 'THB').take(maxFavs).toList();
+    mains = store.mains.every(byCode.containsKey) ? List.of(store.mains) : const ['USD', 'THB'];
+    favs = store.favs.where((c) => byCode.containsKey(c) && !mains.contains(c)).take(maxFavs).toList();
     worldOpen = store.worldOpen;
     final a = store.amount, b = store.base, f = store.from;
     if (a != null && a > 0 && b != null && byCode.containsKey(b)) {
@@ -96,9 +101,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() {
         rates = r;
         error = null;
-        if (!r.has(from)) from = 'THB';
+        if (!r.has(from)) from = mains[1];
         if (!r.has(baseCode)) {
-          baseCode = 'THB';
+          baseCode = mains[1];
           baseV = 1000;
         }
       });
@@ -152,8 +157,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     store.favs = favs;
   }
 
+  /// Основная валюта № slot := code (если code — вторая основная, они меняются местами).
+  void _setMain(int slot, String code) {
+    setState(() {
+      final m = List.of(mains);
+      final other = 1 - slot;
+      if (m[other] == code) m[other] = m[slot];
+      m[slot] = code;
+      mains = m;
+      favs.removeWhere(mains.contains);
+      pickSlot = null;
+    });
+    store.mains = mains;
+    store.favs = favs;
+  }
+
+  void _resetMains() {
+    setState(() {
+      mains = const ['USD', 'THB'];
+      favs.removeWhere(mains.contains);
+      pickSlot = null;
+    });
+    store.mains = mains;
+    store.favs = favs;
+  }
+
+  /// Группы «Остального мира»; основные валюты в списке не показываем (они и так наверху).
   List<Currency> _group(String g) {
-    final list = widget.currencies.where((c) => c.grp == g && has(c.code)).toList();
+    final list = widget.currencies
+        .where((c) => (c.grp == g || (g == 'world' && c.grp == 'pin')) && has(c.code) && (pickSlot != null || !mains.contains(c.code)))
+        .toList();
     list.sort((a, b) => rates!.perUsd[a.code]!.compareTo(rates!.perUsd[b.code]!)); // дорогие сверху, «лесенкой»
     return list;
   }
@@ -165,7 +198,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   String unit(String c) {
-    final ref = c == 'THB' ? 'USD' : 'THB';
+    final ref = c == mains[1] ? mains[0] : mains[1]; // всё меряем второй основной валютой, её саму — первой
     final rs = byCode[ref]!.sym;
     return '1 $c = ${f(conv(1, c, ref))} $rs  ·  1 $rs = ${f(conv(1, ref, c))} $c';
   }
@@ -183,9 +216,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
+    final content = RefreshIndicator(
           onRefresh: _refresh,
           child: LayoutBuilder(builder: (context, box) {
             final wide = box.maxWidth >= 640;
@@ -197,16 +228,58 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1180),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    _header(cs),
-                    const SizedBox(height: 14),
+                    if (!widget.desktop) ...[_header(cs), const SizedBox(height: 14)],
                     if (rates == null) _empty(cs) else ..._body(cs, wide, box.maxWidth - pad * 2),
                   ]),
                 ),
               ),
             );
           }),
-        ),
+        );
+    if (!widget.desktop) return Scaffold(body: SafeArea(child: content));
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: BoxDecoration(border: Border.all(color: cs.outlineVariant.withOpacity(.6))),
+        child: Column(children: [_titleBar(cs), Expanded(child: content)]),
       ),
+    );
+  }
+
+  /// Своя полоска заголовка (Windows/Linux): за неё окно таскается, справа — обновить, язык, тема, свернуть, закрыть.
+  Widget _titleBar(ColorScheme cs) {
+    final themeIcon = {'dark': Icons.dark_mode_outlined, 'light': Icons.light_mode_outlined}[widget.theme] ?? Icons.brightness_auto_outlined;
+    Widget btn(IconData i, String tip, VoidCallback on, {bool danger = false}) => _BarButton(icon: i, tooltip: tip, onTap: on, danger: danger);
+    return SizedBox(
+      height: 40,
+      child: Row(children: [
+        Expanded(
+          child: DragToMoveArea(
+            child: Container(
+              color: Colors.transparent,
+              padding: const EdgeInsets.only(left: 16),
+              alignment: Alignment.centerLeft,
+              child: Text('฿  ${t('Курс валют', 'Exchange rates')}', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ),
+          ),
+        ),
+        if (loading)
+          const SizedBox(width: 40, child: Center(child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))))
+        else
+          btn(Icons.refresh, t('Обновить курс', 'Refresh'), _refresh),
+        _BarButton(
+          label: ru ? 'RU' : 'EN',
+          tooltip: t('Язык', 'Language'),
+          onTap: () {
+            setState(() => ru = !ru);
+            store.lang = ru ? 'ru' : 'en';
+            _syncInput();
+          },
+        ),
+        btn(themeIcon, t('Тема', 'Theme'), widget.onTheme),
+        btn(Icons.remove, t('Свернуть', 'Minimize'), () => windowManager.minimize()),
+        btn(Icons.close, t('Закрыть', 'Close'), () => windowManager.close(), danger: true),
+        const SizedBox(width: 4),
+      ]),
     );
   }
 
@@ -258,7 +331,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return [
       _amountField(cs, soft),
       const SizedBox(height: 12),
-      _cards(['USD', 'THB'], soft, cs, wide),
+      _cards(mains, soft, cs, wide),
       if (shownFavs.isNotEmpty) ...[const SizedBox(height: 12), _cards(shownFavs, grey, cs, wide)],
       if (shownFavs.isEmpty) ...[
         const SizedBox(height: 10),
@@ -292,8 +365,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: grey, borderRadius: BorderRadius.circular(12)),
         child: Text(
-          t('Курс справочный: в обменниках Паттайи он обычно отличается на 1–3%. Нажмите на любую валюту — сумма станет в ней.',
-              'Reference rates: exchange offices in Pattaya usually differ by 1–3%. Tap any currency to enter the amount in it.'),
+          t('Курс справочный: в банках и обменниках он обычно отличается на 1–3%. Нажмите на любую валюту — сумма станет в ней.',
+              'Reference rates: banks and exchange offices usually differ by 1–3%. Tap any currency to enter the amount in it.'),
           style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
         ),
       ),
@@ -334,7 +407,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Крупные плитки: доллар и бат (зелёные), избранное (серые). На широком экране — по две в ряд.
+  /// Крупные плитки: основные валюты (зелёные), избранное (серые). На широком экране — по две в ряд.
   Widget _cards(List<String> codes, Color bg, ColorScheme cs, bool wide) {
     final tiles = codes.map((c) => _bigTile(c, bg, cs, wide)).toList();
     if (!wide) {
@@ -423,7 +496,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         InkWell(
           onTap: () {
-            setState(() => worldOpen = !worldOpen);
+            setState(() {
+              worldOpen = !worldOpen;
+              pickSlot = null;
+            });
             store.worldOpen = worldOpen;
           },
           child: Padding(
@@ -461,6 +537,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           ),
+          _mainsBar(cs, soft),
           if (fc.isNotEmpty) ...[_groupTitle(t('СНГ', 'CIS'), cs), _columns(fc, cols, cs, soft)],
           if (fr.isNotEmpty) ...[_groupTitle(t('Все страны', 'All countries'), cs), _columns(fr, cols, cs, soft)],
           if (fc.isEmpty && fr.isEmpty)
@@ -471,6 +548,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           const SizedBox(height: 8),
         ],
+      ]),
+    );
+  }
+
+  /// «Основные: $ USD ✎  ฿ THB ✎» — смена крупных плиток. Нажал на валюту — строки ниже превращаются в выбор замены.
+  Widget _mainsBar(ColorScheme cs, Color soft) {
+    Widget chip(int i) {
+      final c = byCode[mains[i]]!;
+      final on = pickSlot == i;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8, bottom: 6),
+        child: Material(
+          color: on ? cs.primary : Theme.of(context).colorScheme.surface,
+          shape: StadiumBorder(side: BorderSide(color: on ? cs.primary : cs.outlineVariant)),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () => setState(() => pickSlot = on ? null : i),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('${c.sym} ${c.code}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: on ? cs.onPrimary : cs.onSurface)),
+                const SizedBox(width: 6),
+                Icon(Icons.edit_outlined, size: 14, color: on ? cs.onPrimary : cs.onSurfaceVariant),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isDefault = mains[0] == 'USD' && mains[1] == 'THB';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 10, bottom: 6, left: 4),
+            child: Text(t('ОСНОВНЫЕ:', 'MAIN:'), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: .6, color: cs.onSurfaceVariant)),
+          ),
+          chip(0),
+          chip(1),
+        ]),
+        if (pickSlot != null)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+            decoration: BoxDecoration(color: soft, borderRadius: BorderRadius.circular(10)),
+            child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, children: [
+              Text(t('Нажмите валюту, которая встанет вместо ${mains[pickSlot!]}.', 'Tap the currency to replace ${mains[pickSlot!]}.'),
+                  style: TextStyle(fontSize: 12.5, color: cs.primary)),
+              TextButton(
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
+                onPressed: () => setState(() => pickSlot = null),
+                child: Text(t('Отмена', 'Cancel')),
+              ),
+              if (!isDefault)
+                TextButton(
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 6)),
+                  onPressed: _resetMains,
+                  child: Text(t('Вернуть доллар и бат', 'Back to dollar and baht')),
+                ),
+            ]),
+          ),
       ]),
     );
   }
@@ -505,16 +646,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         message: '${c.name(ru)}\n${unit(c.code)}',
         waitDuration: const Duration(milliseconds: 600),
         child: Material(
-          color: on ? soft : Colors.transparent,
+          color: on && pickSlot == null ? soft : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => _setFrom(c.code),
+            onTap: () => pickSlot != null ? _setMain(pickSlot!, c.code) : _setFrom(c.code),
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 6, 2, 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: on ? cs.primary : Colors.transparent, width: 2),
+                border: Border.all(color: on && pickSlot == null ? cs.primary : Colors.transparent, width: 2),
               ),
               child: Row(children: [
                 _symCircle(c.sym, 34, cs),
@@ -537,6 +678,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         style: const TextStyle(fontSize: 16.5, fontFeatures: [ui.FontFeature.tabularFigures()])),
                   ),
                 ),
+                if (pickSlot != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 8),
+                    child: mains[pickSlot!] == c.code
+                        ? Text(t('сейчас', 'current'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant))
+                        : Text(t('выбрать', 'choose'), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: cs.primary)),
+                  )
+                else
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: fav ? t('Убрать из избранного', 'Remove from favourites') : t('В избранное', 'Add to favourites'),
@@ -545,6 +694,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ]),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _BarButton extends StatefulWidget {
+  final IconData? icon;
+  final String? label;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool danger;
+  const _BarButton({this.icon, this.label, required this.tooltip, required this.onTap, this.danger = false});
+
+  @override
+  State<_BarButton> createState() => _BarButtonState();
+}
+
+class _BarButtonState extends State<_BarButton> {
+  bool hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = !hover ? Colors.transparent : (widget.danger ? const Color(0xFFE5484D) : cs.onSurface.withOpacity(.08));
+    final fg = hover && widget.danger ? Colors.white : cs.onSurfaceVariant;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 700),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => hover = true),
+        onExit: (_) => setState(() => hover = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 40,
+            height: 30,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+            child: widget.icon != null
+                ? Icon(widget.icon, size: 17, color: fg)
+                : Text(widget.label!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: fg)),
           ),
         ),
       ),

@@ -60,6 +60,7 @@ jobs:
           shot light '{"flutter.theme":"light"}'
           shot dark '{"flutter.theme":"dark","flutter.favs":["RUB","GEL"],"flutter.world":true,"flutter.amount":500.0,"flutter.base":"USD","flutter.from":"USD"}'
           shot wide '{"flutter.theme":"light","flutter.favs":["RUB","GEL","EUR"],"flutter.world":true}' 1180
+          shot mains '{"flutter.theme":"light","flutter.mains":["EUR","VND"],"flutter.world":true,"flutter.from":"VND","flutter.base":"VND","flutter.amount":1000000.0}'
           cd shots && git init -q && git checkout -q -b ci-shots && git add . \
             && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "shots ${{ github.sha }}" \
             && git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-shots

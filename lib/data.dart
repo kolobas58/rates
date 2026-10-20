@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const apiUrl = 'https://kolobas58.club/api/rates';
 const siteUrl = 'https://kolobas58.club/rates';
-const appVersion = '1.0.0';
+const appVersion = '1.1.0';
 const maxFavs = 8;
 
 class Currency {
@@ -97,6 +97,14 @@ class Store {
   }
 
   set rates(Rates? r) => r == null ? p.remove('rates') : p.setString('rates', jsonEncode(r.toJson()));
+
+  /// Две основные валюты — крупные зелёные плитки (по умолчанию доллар и бат).
+  List<String> get mains {
+    final v = p.getStringList('mains');
+    return (v != null && v.length == 2 && v[0] != v[1]) ? v : const ['USD', 'THB'];
+  }
+
+  set mains(List<String> v) => p.setStringList('mains', v);
 
   List<String> get favs => p.getStringList('favs') ?? const [];
   set favs(List<String> v) => p.setStringList('favs', v);
