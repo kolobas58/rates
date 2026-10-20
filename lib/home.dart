@@ -117,7 +117,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Window
   Widget _updateBanner(ColorScheme cs, Color soft) {
     final u = widget.updater;
     if (!u.available || u.state == UpState.installing) return const SizedBox.shrink();
-    if (widget.desktop && u.state != UpState.ready) return const SizedBox.shrink(); // качается тихо
+    if (widget.desktop && u.state != UpState.ready && u.state != UpState.failed) return const SizedBox.shrink(); // качается тихо
     final downloading = u.state == UpState.downloading;
     final failed = u.state == UpState.failed;
     return Padding(

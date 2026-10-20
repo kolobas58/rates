@@ -12,6 +12,11 @@ case "$P" in
     # автообновление (ota_update): разрешение ставить APK и FileProvider для скачанного файла
     grep -q 'REQUEST_INSTALL_PACKAGES' "$M" || sed -i '0,/<application/s//<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <application/' "$M"
     grep -q 'ota_update_provider' "$M" || sed -i 's#</application>#    <provider android:name="sk.fourq.otaupdate.OtaUpdateFileProvider" android:authorities="${applicationId}.ota_update_provider" android:exported="false" android:grantUriPermissions="true">\n            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths"/>\n        </provider>\n    </application>#' "$M"
+    # старые плагины (ota_update) собираются с compileSdk 28 → ошибка «android:attr/lStar not found»; поднимаем всем библиотекам
+    G=android/build.gradle
+    if [ -f "$G" ] && ! grep -q 'compileSdkVersion 34 // libs' "$G"; then
+      printf 'subprojects {\n    afterEvaluate { p ->\n        if (p.plugins.hasPlugin("com.android.library")) { p.android { compileSdkVersion 34 // libs\n } }\n    }\n}\n' | cat - "$G" > "$G.tmp" && mv "$G.tmp" "$G"
+    fi
     mkdir -p android/app/src/main/res/xml
     cat > android/app/src/main/res/xml/filepaths.xml <<'X'
 <?xml version="1.0" encoding="utf-8"?>

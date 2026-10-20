@@ -21,6 +21,15 @@ const _api = 'https://api.github.com/repos/kolobas58/rates/releases/latest';
 // для проверки обновления в CI: RATES_TEST_VERSION=1.0.0 — программа считает себя старой версией
 final _current = Platform.environment['RATES_TEST_VERSION'] ?? appVersion;
 
+/// Короткий журнал обновления: <временная папка>/rates_update.log (для разбора, если что-то пошло не так).
+void _log(String m) {
+  try {
+    final f = File('${Directory.systemTemp.path}${Platform.pathSeparator}rates_update.log');
+    f.writeAsStringSync('${DateTime.now().toIso8601String()} $m\n', mode: FileMode.append);
+  } catch (_) {}
+  if (Platform.environment.containsKey('RATES_TEST_VERSION')) stderr.writeln('[update] $m');
+}
+
 enum UpState { idle, downloading, ready, installing, failed }
 
 class Updater extends ChangeNotifier {
@@ -64,9 +73,13 @@ class Updater extends ChangeNotifier {
     try {
       final r = await http.get(Uri.parse(_api), headers: {'Accept': 'application/vnd.github+json', 'User-Agent': 'kolobas58-rates/$appVersion'})
           .timeout(const Duration(seconds: 20));
-      if (r.statusCode != 200) return;
+      if (r.statusCode != 200) {
+        _log('check: HTTP ${r.statusCode}');
+        return;
+      }
       final j = jsonDecode(r.body) as Map<String, dynamic>;
       final tag = (j['tag_name'] ?? '').toString();
+      _log('check: latest $tag, current $_current');
       if (!newer(tag, _current)) return;
       final asset = (j['assets'] as List? ?? []).cast<Map<String, dynamic>>().where((a) => a['name'] == _assetName).toList();
       if (asset.isEmpty) return;
@@ -75,8 +88,8 @@ class Updater extends ChangeNotifier {
       state = UpState.idle;
       notifyListeners();
       if (!Platform.isAndroid) await _download();
-    } catch (_) {
-      // нет сети — проверим позже
+    } catch (e) {
+      _log('check: $e'); // нет сети — проверим позже
     }
   }
 
@@ -95,7 +108,11 @@ class Updater extends ChangeNotifier {
   }
 
   Future<void> _download() async {
-    if (!_writable()) return; // программа лежит там, куда писать нельзя (например, Program Files) — не трогаем
+    if (!_writable()) {
+      _log('download: папка программы только для чтения — ${_appDir.path}');
+      return;
+    }
+    // программа лежит там, куда писать нельзя (например, Program Files) — не трогаем
     state = UpState.downloading;
     progress = 0;
     notifyListeners();
@@ -128,7 +145,9 @@ class Updater extends ChangeNotifier {
       if (!exe.existsSync()) throw Exception('в архиве нет программы');
       if (Platform.isLinux) await Process.run('chmod', ['+x', exe.path]);
       state = UpState.ready;
-    } catch (_) {
+      _log('download: готово ${_staged!.path}');
+    } catch (e) {
+      _log('download: $e');
       state = UpState.failed;
     }
     notifyListeners();
@@ -137,6 +156,7 @@ class Updater extends ChangeNotifier {
   /// Подменить файлы после выхода. restart — сразу запустить новую версию.
   Future<void> apply({required bool restart}) async {
     if (state != UpState.ready || _staged == null) return;
+    _log('apply: restart=$restart');
     final src = _staged!.path, dst = _appDir.path;
     if (Platform.isWindows) {
       final ps1 = File('${_staged!.parent.parent.path}\\apply.ps1');
