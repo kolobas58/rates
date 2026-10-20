@@ -487,7 +487,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ---------------------------------------------------------------- «Остальной мир»
   Widget _world(ColorScheme cs, Color soft, double width) {
     final cis = _group('cis'), rest = _group('world');
-    final total = cis.length + rest.length;
+    final total = [...cis, ...rest].where((c) => !mains.contains(c.code)).length;
     final fc = cis.where(_match).toList(), fr = rest.where(_match).toList();
     final cols = (width / 320).floor().clamp(1, 3);
     return Container(
