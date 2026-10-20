@@ -51,15 +51,16 @@ jobs:
         run: |
           sudo apt-get install -y xvfb imagemagick xdotool >/dev/null
           P=~/.local/share/club.kolobas58.rates
-          shot() {  # $1 — имя, $2 — настройки, $3 — ширина окна (необязательно)
+          shot() {  # $1 — имя, $2 — настройки, $3 — ширина окна (необязательно), $4 — действие xdotool после запуска
             rm -rf "$P"; mkdir -p "$P"; echo "$2" > "$P/shared_preferences.json"
-            W="${3:-}"
-            xvfb-run -a -s "-screen 0 1200x900x24" bash -c "./rates/rates & sleep 6; [ -n '$W' ] && xdotool search --onlyvisible --class rates windowsize $W 860; sleep 8; import -window root shots/$1.png; kill %1" || true
+            W="${3:-}"; A="${4:-true}"
+            xvfb-run -a -s "-screen 0 1200x900x24" bash -c "./rates/rates & sleep 6; [ -n '$W' ] && xdotool search --onlyvisible --class rates windowsize $W 860 windowmove 340 20; sleep 7; $A; sleep 1; import -window root shots/$1.png; kill %1" || true
           }
           mkdir -p shots
           shot light '{"flutter.theme":"light"}'
           shot dark '{"flutter.theme":"dark","flutter.favs":["RUB","GEL"],"flutter.world":true,"flutter.amount":500.0,"flutter.base":"USD","flutter.from":"USD"}'
           shot wide '{"flutter.theme":"light","flutter.favs":["RUB","GEL","EUR"],"flutter.world":true}' 1180
+          shot pick '{"flutter.theme":"light","flutter.world":true}' 520 "xdotool mousemove 613 490 click 1"
           shot mains '{"flutter.theme":"light","flutter.mains":["EUR","VND"],"flutter.world":true,"flutter.from":"VND","flutter.base":"VND","flutter.amount":1000000.0}'
           cd shots && git init -q && git checkout -q -b ci-shots && git add . \
             && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "shots ${{ github.sha }}" \

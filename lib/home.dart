@@ -516,8 +516,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         if (worldOpen) ...[
           Divider(height: 1, color: cs.outlineVariant),
+          _mainsBar(cs, soft),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 4),
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
             child: TextField(
               controller: searchCtl,
               onChanged: (s) => setState(() => query = s.toLowerCase().replaceAll('ё', 'е').trim()),
@@ -537,7 +538,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           ),
-          _mainsBar(cs, soft),
           if (fc.isNotEmpty) ...[_groupTitle(t('СНГ', 'CIS'), cs), _columns(fc, cols, cs, soft)],
           if (fr.isNotEmpty) ...[_groupTitle(t('Все страны', 'All countries'), cs), _columns(fr, cols, cs, soft)],
           if (fc.isEmpty && fr.isEmpty)
@@ -580,7 +580,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final isDefault = mains[0] == 'USD' && mains[1] == 'THB';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
           Padding(
