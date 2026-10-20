@@ -17,7 +17,7 @@ class Currency {
 
   factory Currency.fromJson(Map<String, dynamic> j) => Currency(
         j['code'] as String,
-        j['sym'] as String,
+        _safeSym(j['sym'] as String, j['code'] as String),
         j['ru'] as String,
         j['en'] as String,
         j['grp'] as String,
@@ -25,6 +25,17 @@ class Currency {
       );
 
   String name(bool ru) => ru ? this.ru : en;
+}
+
+/// Знак валюты — только если его точно нарисуют стандартные шрифты Windows/Linux/Android
+/// (латиница, кириллица, блок знаков валют U+20A0–U+20CF и ¢£¥). Иначе показываем код: ֏, ៛, ریال и т. п. выходят «квадратиками».
+String _safeSym(String sym, String code) {
+  for (final r in sym.runes) {
+    final ok = (r >= 0x20 && r <= 0x7E) || (r >= 0xA2 && r <= 0xA5) || (r >= 0x0400 && r <= 0x04FF) ||
+        (r >= 0x20A0 && r <= 0x20CF) || r == 0x0E3F || r == 0x02BB;
+    if (!ok) return code;
+  }
+  return sym;
 }
 
 class Rates {
