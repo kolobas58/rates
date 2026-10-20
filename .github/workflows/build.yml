@@ -82,16 +82,24 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: out/* }
 
+  # выпуск: метка v* или коммит в main с «[release]» в сообщении (версия — из pubspec.yaml)
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
     needs: [android, linux, windows]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "tag=v$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with: { path: dist, merge-multiple: true }
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.v.outputs.tag }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: dist/*
           body: |
             **Курс валют by kolobas58** — бат, доллар, СНГ и весь мир. Курсы — с kolobas58.club, без интернета показывает последний сохранённый.
