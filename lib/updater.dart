@@ -167,6 +167,10 @@ class Updater extends ChangeNotifier {
       if (Platform.isLinux) await Process.run('chmod', ['+x', exe.path]);
       state = UpState.ready;
       _log('download: готово ${_staged!.path}');
+      if (Platform.environment['RATES_TEST_AUTOAPPLY'] == '1') {      // только для проверки в CI
+        await apply(restart: false);
+        exit(0);
+      }
     } catch (e) {
       _log('download: $e');
       state = UpState.failed;

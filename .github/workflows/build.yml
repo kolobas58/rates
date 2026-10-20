@@ -81,6 +81,18 @@ jobs:
         shell: bash
       - run: bash tool/run.sh flutter build windows --release
         shell: bash
+      - name: Проверка автообновления на Windows
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse build/windows/x64/runner/Release C:\upd
+          $before = (Get-FileHash C:\upd\data\app.so).Hash.Substring(0,8)
+          $env:RATES_TEST_VERSION = '1.0.0'; $env:RATES_TEST_AUTOAPPLY = '1'
+          $p = Start-Process C:\upd\rates.exe -PassThru
+          $p | Wait-Process -Timeout 90 -ErrorAction SilentlyContinue
+          Start-Sleep 15
+          $after = (Get-FileHash C:\upd\data\app.so).Hash.Substring(0,8)
+          $log = (Get-Content "$env:TEMP\rates_update.log" -ErrorAction SilentlyContinue) -join ' | '
+          Write-Output "::notice title=autoupdate-win::app.so $before -> $after | $log"
       - shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
