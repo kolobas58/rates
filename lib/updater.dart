@@ -169,6 +169,7 @@ class Updater extends ChangeNotifier {
       _log('download: готово ${_staged!.path}');
       if (Platform.environment['RATES_TEST_AUTOAPPLY'] == '1') {      // только для проверки в CI
         await apply(restart: false);
+        await Future.delayed(const Duration(milliseconds: 500));
         exit(0);
       }
     } catch (e) {
@@ -182,31 +183,39 @@ class Updater extends ChangeNotifier {
   Future<void> apply({required bool restart}) async {
     if (state != UpState.ready || _staged == null) return;
     _log('apply: restart=$restart');
-    final src = _staged!.path, dst = _appDir.path;
-    if (Platform.isWindows) {
-      final ps1 = File('${_staged!.parent.parent.path}\\apply.ps1');
-      ps1.writeAsStringSync(r'''
-param([int]$Id, [string]$Src, [string]$Dst, [string]$Restart, [string]$Log)
-try { Wait-Process -Id $Id -Timeout 20 -ErrorAction SilentlyContinue } catch {}
-Start-Sleep -Milliseconds 400
-# robocopy: overwrite with retries while files are still locked
-robocopy $Src $Dst /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-Add-Content -Path $Log -Value ((Get-Date -Format s) + " apply.ps1: robocopy exit $LASTEXITCODE")
-if ($Restart -eq '1') { Start-Process -FilePath (Join-Path $Dst 'rates.exe') -WorkingDirectory $Dst }
-''');
-      await Process.start('powershell', [
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1.path,
-        '-Id', '$pid', '-Src', src, '-Dst', dst, '-Restart', restart ? '1' : '0',
-        '-Log', '${Directory.systemTemp.path}\\rates_update.log',
-      ], mode: ProcessStartMode.detached);
-    } else {
-      final sh = File('${_staged!.parent.parent.path}/apply.sh');
-      sh.writeAsStringSync('''#!/bin/sh
-while kill -0 $pid 2>/dev/null; do sleep 0.2; done
-cp -rf "$src/." "$dst/" && chmod +x "$dst/rates"
-${restart ? '(cd "$dst" && nohup ./rates >/dev/null 2>&1 &)' : ''}
-''');
-      await Process.start('sh', [sh.path], mode: ProcessStartMode.detached);
+    try {
+      final src = _staged!.path, dst = _appDir.path;
+      if (Platform.isWindows) {
+        final ps1 = File('${_staged!.parent.parent.path}\\apply.ps1');
+        ps1.writeAsStringSync(r'''
+  param([int]$Id, [string]$Src, [string]$Dst, [string]$Restart, [string]$Log)
+  Add-Content -Path $Log -Value ((Get-Date -Format s) + " apply.ps1: start")
+  try { Wait-Process -Id $Id -Timeout 20 -ErrorAction SilentlyContinue } catch {}
+  Start-Sleep -Milliseconds 400
+  # robocopy: overwrite with retries while files are still locked
+  robocopy $Src $Dst /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+  Add-Content -Path $Log -Value ((Get-Date -Format s) + " apply.ps1: robocopy exit $LASTEXITCODE")
+  if ($Restart -eq '1') { Start-Process -FilePath (Join-Path $Dst 'rates.exe') -WorkingDirectory $Dst }
+  ''');
+        final ps = '${Platform.environment['SystemRoot'] ?? r'C:\Windows'}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+        final pr = await Process.start(ps, [
+          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1.path,
+          '-Id', '$pid', '-Src', src, '-Dst', dst, '-Restart', restart ? '1' : '0',
+          '-Log', '${Directory.systemTemp.path}\\rates_update.log',
+        ], mode: ProcessStartMode.detached);
+        _log('apply: запущен powershell, pid ${pr.pid}');
+      } else {
+        final sh = File('${_staged!.parent.parent.path}/apply.sh');
+        sh.writeAsStringSync('''#!/bin/sh
+  while kill -0 $pid 2>/dev/null; do sleep 0.2; done
+  cp -rf "$src/." "$dst/" && chmod +x "$dst/rates"
+  ${restart ? '(cd "$dst" && nohup ./rates >/dev/null 2>&1 &)' : ''}
+  ''');
+        await Process.start('sh', [sh.path], mode: ProcessStartMode.detached);
+      }
+    } catch (e) {
+      _log('apply: $e');
+      return;
     }
     state = UpState.installing;
     notifyListeners();
