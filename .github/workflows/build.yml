@@ -49,15 +49,17 @@ jobs:
       - name: Скриншоты для проверки (ветка ci-shots)
         if: github.ref == 'refs/heads/main'
         run: |
-          sudo apt-get install -y xvfb imagemagick >/dev/null
+          sudo apt-get install -y xvfb imagemagick xdotool >/dev/null
           P=~/.local/share/club.kolobas58.rates
-          shot() {  # $1 — имя, $2 — настройки
+          shot() {  # $1 — имя, $2 — настройки, $3 — ширина окна (необязательно)
             rm -rf "$P"; mkdir -p "$P"; echo "$2" > "$P/shared_preferences.json"
-            xvfb-run -a -s "-screen 0 1100x900x24" bash -c "./rates/rates & sleep 14; import -window root shots/$1.png; kill %1" || true
+            W="${3:-}"
+            xvfb-run -a -s "-screen 0 1200x900x24" bash -c "./rates/rates & sleep 6; [ -n '$W' ] && xdotool search --onlyvisible --class rates windowsize $W 860; sleep 8; import -window root shots/$1.png; kill %1" || true
           }
           mkdir -p shots
           shot light '{"flutter.theme":"light"}'
           shot dark '{"flutter.theme":"dark","flutter.favs":["RUB","GEL"],"flutter.world":true,"flutter.amount":500.0,"flutter.base":"USD","flutter.from":"USD"}'
+          shot wide '{"flutter.theme":"light","flutter.favs":["RUB","GEL","EUR"],"flutter.world":true}' 1180
           cd shots && git init -q && git checkout -q -b ci-shots && git add . \
             && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "shots ${{ github.sha }}" \
             && git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-shots

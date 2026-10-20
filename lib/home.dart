@@ -23,8 +23,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final Map<String, Currency> byCode = {for (final c in widget.currencies) c.code: c};
-  late final bool ru = const {'ru', 'uk', 'be', 'kk', 'ky', 'uz', 'tg', 'hy', 'az'}
-      .contains(ui.PlatformDispatcher.instance.locale.languageCode);
+  late bool ru = store.lang != 'en';
   final amountCtl = TextEditingController();
   final searchCtl = TextEditingController();
   final amountFocus = FocusNode();
@@ -220,6 +219,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (loading) const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
       if (!loading)
         IconButton(tooltip: t('Обновить курс', 'Refresh'), onPressed: _refresh, icon: const Icon(Icons.refresh)),
+      TextButton(
+        style: TextButton.styleFrom(minimumSize: const Size(44, 40), foregroundColor: cs.onSurfaceVariant),
+        onPressed: () {
+          setState(() => ru = !ru);
+          store.lang = ru ? 'ru' : 'en';
+          _syncInput();
+        },
+        child: Text(ru ? 'RU' : 'EN', style: const TextStyle(fontWeight: FontWeight.w800)),
+      ),
       IconButton(tooltip: t('Тема', 'Theme'), onPressed: widget.onTheme, icon: Icon(themeIcon)),
     ]);
   }
@@ -366,7 +374,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             _symCircle(c.sym, wide ? 52 : 42, cs, bg: Theme.of(context).colorScheme.surface),
             const SizedBox(width: 14),
             Expanded(
-              flex: 5,
+              flex: 4,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(c.name(ru), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
@@ -375,7 +383,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             const SizedBox(width: 10),
             Flexible(
-              flex: 6,
+              flex: 5,
+              fit: FlexFit.tight,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
@@ -511,6 +520,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 _symCircle(c.sym, 34, cs),
                 const SizedBox(width: 10),
                 Expanded(
+                  flex: 5,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(c.code, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                     Text(c.name(ru), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
@@ -518,6 +528,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(width: 6),
                 Flexible(
+                  flex: 4,
+                  fit: FlexFit.tight,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,

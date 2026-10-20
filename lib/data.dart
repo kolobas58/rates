@@ -102,6 +102,10 @@ class Store {
   bool get worldOpen => p.getBool('world') ?? false;
   set worldOpen(bool v) => p.setBool('world', v);
 
+  /// 'ru' | 'en' — по умолчанию русский (сайт и аудитория русскоязычные)
+  String get lang => p.getString('lang') ?? 'ru';
+  set lang(String v) => p.setString('lang', v);
+
   /// 'system' | 'light' | 'dark'
   String get theme => p.getString('theme') ?? 'system';
   set theme(String v) => p.setString('theme', v);
