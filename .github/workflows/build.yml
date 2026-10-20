@@ -31,6 +31,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
+    permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
@@ -45,6 +46,21 @@ jobs:
           tar -czf out/Rates-Linux-x64.tar.gz rates
       - uses: actions/upload-artifact@v4
         with: { name: linux, path: out/* }
+      - name: Скриншоты для проверки (ветка ci-shots)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          sudo apt-get install -y xvfb imagemagick >/dev/null
+          P=~/.local/share/club.kolobas58.rates
+          shot() {  # $1 — имя, $2 — настройки
+            rm -rf "$P"; mkdir -p "$P"; echo "$2" > "$P/shared_preferences.json"
+            xvfb-run -a -s "-screen 0 1100x900x24" bash -c "./rates/rates & sleep 14; import -window root shots/$1.png; kill %1" || true
+          }
+          mkdir -p shots
+          shot light '{"flutter.theme":"light"}'
+          shot dark '{"flutter.theme":"dark","flutter.favs":["RUB","GEL"],"flutter.world":true,"flutter.amount":500.0,"flutter.base":"USD","flutter.from":"USD"}'
+          cd shots && git init -q && git checkout -q -b ci-shots && git add . \
+            && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "shots ${{ github.sha }}" \
+            && git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-shots
 
   windows:
     runs-on: windows-2022
