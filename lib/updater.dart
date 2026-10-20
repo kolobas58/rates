@@ -197,13 +197,22 @@ class Updater extends ChangeNotifier {
   Add-Content -Path $Log -Value ((Get-Date -Format s) + " apply.ps1: robocopy exit $LASTEXITCODE")
   if ($Restart -eq '1') { Start-Process -FilePath (Join-Path $Dst 'rates.exe') -WorkingDirectory $Dst }
   ''');
-        final ps = '${Platform.environment['SystemRoot'] ?? r'C:\Windows'}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
-        final pr = await Process.start(ps, [
-          '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1.path,
-          '-Id', '$pid', '-Src', src, '-Dst', dst, '-Restart', restart ? '1' : '0',
-          '-Log', '${Directory.systemTemp.path}\\rates_update.log',
-        ], mode: ProcessStartMode.detached);
-        _log('apply: запущен powershell, pid ${pr.pid}');
+        // PowerShell без консоли (detached) на Windows не стартует — запускаем его скрыто через wscript (GUI, без мигания окна)
+        final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+        final ps = '$root\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+        String q(String x) => '""$x""'; // кавычки внутри строки VBScript
+        final cmd = [q(ps), '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', q(ps1.path),
+          '-Id', '$pid', '-Src', q(src), '-Dst', q(dst), '-Restart', restart ? '1' : '0',
+          '-Log', q('${Directory.systemTemp.path}\\rates_update.log')].join(' ');
+        // UTF-16 с BOM — чтобы пути с кириллицей дошли как есть
+        final text = 'CreateObject("WScript.Shell").Run "$cmd", 0, False\r\n';
+        final bytes = <int>[0xFF, 0xFE];
+        for (final u in text.codeUnits) {
+          bytes..add(u & 0xFF)..add(u >> 8);
+        }
+        final vbs = File('${_staged!.parent.parent.path}\\apply.vbs')..writeAsBytesSync(bytes);
+        final pr = await Process.start('$root\\System32\\wscript.exe', ['//B', '//Nologo', vbs.path], mode: ProcessStartMode.detached);
+        _log('apply: запущен wscript, pid ${pr.pid}');
       } else {
         final sh = File('${_staged!.parent.parent.path}/apply.sh');
         sh.writeAsStringSync('''#!/bin/sh
