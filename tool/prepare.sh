@@ -9,6 +9,19 @@ case "$P" in
     M=android/app/src/main/AndroidManifest.xml
     sed -i 's/android:label="rates"/android:label="Курс валют"/' "$M"
     grep -q 'android.permission.INTERNET' "$M" || sed -i '0,/<application/s//<uses-permission android:name="android.permission.INTERNET"\/>\n    <application/' "$M"
+    # автообновление (ota_update): разрешение ставить APK и FileProvider для скачанного файла
+    grep -q 'REQUEST_INSTALL_PACKAGES' "$M" || sed -i '0,/<application/s//<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <application/' "$M"
+    grep -q 'ota_update_provider' "$M" || sed -i 's#</application>#    <provider android:name="sk.fourq.otaupdate.OtaUpdateFileProvider" android:authorities="${applicationId}.ota_update_provider" android:exported="false" android:grantUriPermissions="true">\n            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths"/>\n        </provider>\n    </application>#' "$M"
+    mkdir -p android/app/src/main/res/xml
+    cat > android/app/src/main/res/xml/filepaths.xml <<'X'
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-path name="external" path="."/>
+    <external-files-path name="external_files" path="."/>
+    <files-path name="files" path="."/>
+    <cache-path name="cache" path="."/>
+</paths>
+X
     ;;
   linux)
     F=linux/runner/my_application.cc

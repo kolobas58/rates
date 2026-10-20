@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'data.dart';
 import 'home.dart';
+import 'updater.dart';
 
 const brand = Color(0xFF128C7E);
 const brandDark = Color(0xFF1FB59F);
@@ -33,13 +34,16 @@ void main() async {
   }
   final store = await Store.open();
   final currencies = await loadCurrencies();
-  runApp(RatesApp(store: store, currencies: currencies));
+  final updater = Updater()..start();
+  if (desktop) await windowManager.setPreventClose(true); // закрытие ловит HomePage: сначала подменить файлы, если обновление скачано
+  runApp(RatesApp(store: store, currencies: currencies, updater: updater));
 }
 
 class RatesApp extends StatefulWidget {
   final Store store;
   final List<Currency> currencies;
-  const RatesApp({super.key, required this.store, required this.currencies});
+  final Updater updater;
+  const RatesApp({super.key, required this.store, required this.currencies, required this.updater});
 
   @override
   State<RatesApp> createState() => _RatesAppState();
@@ -78,7 +82,7 @@ class _RatesAppState extends State<RatesApp> {
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: {'light': ThemeMode.light, 'dark': ThemeMode.dark}[theme] ?? ThemeMode.system,
-      home: HomePage(store: widget.store, currencies: widget.currencies, theme: theme, onTheme: _cycleTheme, desktop: desktop),
+      home: HomePage(store: widget.store, currencies: widget.currencies, theme: theme, onTheme: _cycleTheme, desktop: desktop, updater: widget.updater),
     );
   }
 }

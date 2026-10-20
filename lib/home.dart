@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'data.dart';
+import 'updater.dart';
 
 const _star = Color(0xFFF5A524);
 
@@ -17,13 +18,15 @@ class HomePage extends StatefulWidget {
   final String theme;
   final VoidCallback onTheme;
   final bool desktop; // Windows/Linux: своя полоска заголовка вместо рамки окна
-  const HomePage({super.key, required this.store, required this.currencies, required this.theme, required this.onTheme, this.desktop = false});
+  final Updater updater;
+  const HomePage(
+      {super.key, required this.store, required this.currencies, required this.theme, required this.onTheme, required this.updater, this.desktop = false});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver, WindowListener {
   late final Map<String, Currency> byCode = {for (final c in widget.currencies) c.code: c};
   late bool ru = store.lang != 'en';
   final amountCtl = TextEditingController();
@@ -50,6 +53,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.desktop) windowManager.addListener(this);
+    widget.updater.addListener(_onUpdater);
     rates = store.rates;
     mains = store.mains.every(byCode.containsKey) ? List.of(store.mains) : const ['USD', 'THB'];
     favs = store.favs.where((c) => byCode.containsKey(c) && !mains.contains(c)).take(maxFavs).toList();
@@ -83,11 +88,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (widget.desktop) windowManager.removeListener(this);
+    widget.updater.removeListener(_onUpdater);
     timer?.cancel();
     amountCtl.dispose();
     searchCtl.dispose();
     amountFocus.dispose();
     super.dispose();
+  }
+
+  void _onUpdater() {
+    if (mounted) setState(() {});
+  }
+
+  /// Закрыли окно: если новая версия уже скачана — тихо подменяем файлы (откроется при следующем запуске).
+  @override
+  void onWindowClose() async {
+    await widget.updater.apply(restart: false);
+    await windowManager.destroy();
+  }
+
+  Future<void> _restartToUpdate() async {
+    await widget.updater.apply(restart: true);
+    await windowManager.destroy();
+  }
+
+  /// Полоска «есть обновление»: на компьютере — «Перезапустить», на Android — «Обновить» (откроется установщик).
+  Widget _updateBanner(ColorScheme cs, Color soft) {
+    final u = widget.updater;
+    if (!u.available || u.state == UpState.installing) return const SizedBox.shrink();
+    if (widget.desktop && u.state != UpState.ready) return const SizedBox.shrink(); // качается тихо
+    final downloading = u.state == UpState.downloading;
+    final failed = u.state == UpState.failed;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: soft,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+          child: Row(children: [
+            Icon(Icons.system_update_alt, size: 18, color: cs.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                failed
+                    ? t('Не удалось скачать обновление ${u.version}.', 'Could not download update ${u.version}.')
+                    : downloading
+                        ? t('Скачиваю версию ${u.version}… ${(u.progress * 100).round()}%', 'Downloading ${u.version}… ${(u.progress * 100).round()}%')
+                        : widget.desktop
+                            ? t('Версия ${u.version} готова — установится при закрытии.', 'Version ${u.version} is ready — installs on close.')
+                            : t('Вышла версия ${u.version}.', 'Version ${u.version} is out.'),
+                style: TextStyle(fontSize: 13, color: cs.primary, fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (!downloading)
+              FilledButton(
+                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                onPressed: failed ? u.check : (widget.desktop ? _restartToUpdate : u.installAndroid),
+                child: Text(failed ? t('Повторить', 'Retry') : (widget.desktop ? t('Перезапустить', 'Restart') : t('Обновить', 'Update'))),
+              ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _refresh({bool quiet = false}) async {
@@ -329,6 +393,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final grey = (dark ? Colors.white : Colors.black).withOpacity(.05);
     final shownFavs = favs.where(has).toList();
     return [
+      _updateBanner(cs, soft),
       _amountField(cs, soft),
       const SizedBox(height: 12),
       _cards(mains, soft, cs, wide),
