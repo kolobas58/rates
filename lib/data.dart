@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const apiUrl = 'https://kolobas58.club/api/rates';
 const siteUrl = 'https://kolobas58.club/rates';
-const appVersion = '1.2.1';
+const appVersion = '1.2.2';
 const maxFavs = 8;
 
 class Currency {

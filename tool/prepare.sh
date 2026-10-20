@@ -12,6 +12,27 @@ case "$P" in
     # автообновление (ota_update): разрешение ставить APK и FileProvider для скачанного файла
     grep -q 'REQUEST_INSTALL_PACKAGES' "$M" || sed -i '0,/<application/s//<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"\/>\n    <application/' "$M"
     grep -q 'ota_update_provider' "$M" || sed -i 's#</application>#    <provider android:name="sk.fourq.otaupdate.OtaUpdateFileProvider" android:authorities="${applicationId}.ota_update_provider" android:exported="false" android:grantUriPermissions="true">\n            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths"/>\n        </provider>\n    </application>#' "$M"
+    # подпись релиза постоянным ключом (~/.android/release.keystore кладёт CI из секрета ANDROID_KEYSTORE_B64)
+    A=android/app/build.gradle
+    if [ -f "$A" ] && ! grep -q 'signingConfigs.release' "$A"; then
+      python3 - "$A" <<'PY'
+import sys, re
+p = sys.argv[1]; s = open(p).read()
+cfg = """    signingConfigs {
+        release {
+            storeFile file("${System.getProperty('user.home')}/.android/release.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {"""
+s = s.replace("    buildTypes {", cfg, 1)
+s = re.sub(r"signingConfig\s*=?\s*signingConfigs\.debug", "signingConfig = signingConfigs.release", s)
+open(p, "w").write(s)
+PY
+    fi
     # старые плагины (ota_update) собираются с compileSdk 28 → ошибка «android:attr/lStar not found»; поднимаем всем библиотекам
     G=android/build.gradle
     if [ -f "$G" ] && ! grep -q 'compileSdkVersion 34 // libs' "$G"; then
