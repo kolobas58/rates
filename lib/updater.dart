@@ -186,17 +186,18 @@ class Updater extends ChangeNotifier {
     if (Platform.isWindows) {
       final ps1 = File('${_staged!.parent.parent.path}\\apply.ps1');
       ps1.writeAsStringSync(r'''
-param([int]$Id, [string]$Src, [string]$Dst, [string]$Restart)
+param([int]$Id, [string]$Src, [string]$Dst, [string]$Restart, [string]$Log)
 try { Wait-Process -Id $Id -Timeout 20 -ErrorAction SilentlyContinue } catch {}
 Start-Sleep -Milliseconds 400
-for ($i = 0; $i -lt 10; $i++) {
-  try { Copy-Item -Path (Join-Path $Src '*') -Destination $Dst -Recurse -Force -ErrorAction Stop; break } catch { Start-Sleep -Milliseconds 500 }
-}
+# robocopy: overwrite with retries while files are still locked
+robocopy $Src $Dst /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+Add-Content -Path $Log -Value ((Get-Date -Format s) + " apply.ps1: robocopy exit $LASTEXITCODE")
 if ($Restart -eq '1') { Start-Process -FilePath (Join-Path $Dst 'rates.exe') -WorkingDirectory $Dst }
 ''');
       await Process.start('powershell', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1.path,
         '-Id', '$pid', '-Src', src, '-Dst', dst, '-Restart', restart ? '1' : '0',
+        '-Log', '${Directory.systemTemp.path}\\rates_update.log',
       ], mode: ProcessStartMode.detached);
     } else {
       final sh = File('${_staged!.parent.parent.path}/apply.sh');
