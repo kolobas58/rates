@@ -12,3 +12,4 @@ macos/
 web/
 *.iml
 .idea/
+.run.log

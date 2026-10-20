@@ -3,7 +3,7 @@
 # название окна, размер, разрешение на интернет и значок. Запуск: bash tool/prepare.sh android|linux|windows
 set -euo pipefail
 P="$1"
-flutter create --org club.kolobas58 --project-name rates --platforms="$P" . >/dev/null
+flutter create --org club.kolobas58 --project-name rates --platforms="$P" .
 case "$P" in
   android)
     M=android/app/src/main/AndroidManifest.xml
@@ -22,6 +22,6 @@ case "$P" in
     sed -i 's/"FileDescription", "rates"/"FileDescription", "Kurs valyut by kolobas58"/; s/"ProductName", "rates"/"ProductName", "Kurs valyut"/; s/"CompanyName", "club.kolobas58"/"CompanyName", "kolobas58.club"/' "$R"
     ;;
 esac
-flutter pub get >/dev/null
+flutter pub get
 if [ "$P" != linux ]; then dart run flutter_launcher_icons; fi
 echo "prepared $P"
