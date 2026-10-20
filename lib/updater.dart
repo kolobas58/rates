@@ -137,12 +137,33 @@ class Updater extends ChangeNotifier {
       final out = Directory('${tmp.path}${Platform.pathSeparator}x')..createSync();
       final bytes = file.readAsBytesSync();
       final arc = Platform.isWindows ? ZipDecoder().decodeBytes(bytes) : TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
-      extractArchiveToDisk(arc, out.path);
-      // в архиве одна папка верхнего уровня (Rates/ или rates/) — берём её содержимое
-      final top = out.listSync().whereType<Directory>().toList();
-      _staged = top.length == 1 ? top.first : out;
-      final exe = File('${_staged!.path}${Platform.pathSeparator}${Platform.isWindows ? 'rates.exe' : 'rates'}');
-      if (!exe.existsSync()) throw Exception('в архиве нет программы');
+      final exeName = Platform.isWindows ? 'rates.exe' : 'rates';
+      // распаковываем сами: так надёжнее, чем extractArchiveToDisk, и видно, что лежит в архиве
+      for (final f in arc.files) {
+        final name = f.name.replaceAll('\\', '/');
+        if (name.contains('..')) continue;
+        final path = '${out.path}/$name';
+        if (f.isFile) {
+          final file = File(path);
+          file.parent.createSync(recursive: true);
+          file.writeAsBytesSync(f.content as List<int>);
+        } else {
+          Directory(path).createSync(recursive: true);
+        }
+      }
+      // папка, где лежит сама программа (rates/rates или Rates/rates.exe)
+      File? exe;
+      for (final e in out.listSync(recursive: true)) {
+        if (e is File && e.uri.pathSegments.last == exeName) {
+          exe = e;
+          break;
+        }
+      }
+      if (exe == null) {
+        _log('download: в архиве ${arc.files.length} файлов, первые: ${arc.files.take(5).map((f) => f.name).join(', ')}');
+        throw Exception('в архиве нет программы');
+      }
+      _staged = exe.parent;
       if (Platform.isLinux) await Process.run('chmod', ['+x', exe.path]);
       state = UpState.ready;
       _log('download: готово ${_staged!.path}');
