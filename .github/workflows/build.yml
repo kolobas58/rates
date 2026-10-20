@@ -81,6 +81,10 @@ jobs:
         shell: bash
       - run: bash tool/run.sh flutter build windows --release
         shell: bash
+      - name: Рантайм Visual C++ рядом с программой (на чистой Windows его может не быть)
+        shell: pwsh
+        run: |
+          foreach ($d in 'msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll') { Copy-Item "$env:WINDIR\System32\$d" build/windows/x64/runner/Release/ }
       - name: Проверка автообновления на Windows
         shell: pwsh
         run: |
