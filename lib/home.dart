@@ -269,12 +269,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Window
 
   String _updated() {
     final r = rates!;
-    final d = DateTime.fromMillisecondsSinceEpoch(r.ts * 1000);
     String two(int x) => x.toString().padLeft(2, '0');
-    final when = '${two(d.day)}.${two(d.month)} ${two(d.hour)}:${two(d.minute)}';
-    final src = r.src.map((s) => s == 'ЦБ РФ' && !ru ? 'Bank of Russia' : s).join(', ');
-    return '${t('Обновлено', 'Updated')} $when${src.isNotEmpty ? '  ·  ${t('Источник', 'Source')}: $src' : ''}';
+    String when(int ts) {
+      final d = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+      final n = DateTime.now();
+      final today = d.year == n.year && d.month == n.month && d.day == n.day;
+      return '${today ? '' : '${two(d.day)}.${two(d.month)} '}${two(d.hour)}:${two(d.minute)}';
+    }
+    String en(String s) => ru ? s : (s == 'ЦБ РФ' ? 'Bank of Russia' : s == 'ЕЦБ' ? 'ECB' : s);
+    final src = r.src.map(en).join(', ');
+    return '${t('Проверено', 'Checked')} ${when(r.ts)}'
+        '${src.isNotEmpty ? '  ·  ${t(r.src.length > 1 ? 'Источники' : 'Источник', r.src.length > 1 ? 'Sources' : 'Source')}: $src' : ''}';
   }
+
+  /// Данные у всех источников старше 3 суток — что-то не так, говорим прямо.
+  bool get _stale => rates != null && DateTime.now().millisecondsSinceEpoch / 1000 - rates!.dataTs > 3 * 86400;
 
   // ---------------------------------------------------------------- экран
   @override
@@ -422,6 +431,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Window
             Icon(Icons.cloud_off, size: 15, color: cs.error),
             const SizedBox(width: 6),
             Expanded(child: Text(t('Нет связи — показан последний сохранённый курс.', 'Offline — showing the last saved rates.'), style: TextStyle(fontSize: 12.5, color: cs.error))),
+          ]),
+        ),
+      if (_stale && error == null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(children: [
+            Icon(Icons.schedule, size: 15, color: cs.error),
+            const SizedBox(width: 6),
+            Expanded(
+                child: Text(t('Источники давно не обновляли курс — он может быть неточным.', 'Sources have not updated for a while — rates may be outdated.'),
+                    style: TextStyle(fontSize: 12.5, color: cs.error))),
           ]),
         ),
       Text(_updated(), style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
